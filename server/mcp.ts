@@ -35,6 +35,19 @@ function safe<A>(fn: (a: A) => string | Promise<string>) {
   };
 }
 
+/**
+ * Objet zod strict : un champ inconnu est refusé avec un message qui liste les champs acceptés,
+ * au lieu d'être ignoré en silence (un client avec un schéma périmé voit tout de suite son erreur).
+ */
+function strict<T extends z.ZodRawShape>(shape: T) {
+  const allowed = Object.keys(shape).join(', ') || '(aucun)';
+  return z.strictObject(shape, {
+    error: (iss) => iss.code === 'unrecognized_keys'
+      ? `Champ(s) inconnu(s) : ${iss.keys.join(', ')}. Champs acceptés : ${allowed}.`
+      : undefined,
+  });
+}
+
 const bookFields = {
   subtitle: z.string().optional(),
   author: z.string().optional(),
@@ -127,7 +140,7 @@ export function buildMcpServer() {
   server.registerTool('list_books', {
     title: 'Lister les livres',
     description: 'Liste les livres de la bibliothèque avec leur statut et ce qui a été noté pour chacun. Filtrable par statut (a_lire = pile à lire et envies).',
-    inputSchema: { status: z.enum(repo.STATUSES).optional() },
+    inputSchema: strict({ status: z.enum(repo.STATUSES).optional() }),
     annotations: ro,
   }, safe(({ status }) => {
     const books = repo.listBooks({ status });
@@ -138,7 +151,7 @@ export function buildMcpServer() {
   server.registerTool('get_book', {
     title: 'Lire la fiche d’un livre',
     description: 'Renvoie la fiche complète d’un livre : métadonnées, résumé, avis, idées clés, citations, notes par chapitre, personnages et mots appris. À appeler avant d’ajouter quoi que ce soit à ce livre.',
-    inputSchema: { book_id: z.number().int() },
+    inputSchema: strict({ book_id: z.number().int() }),
     annotations: ro,
   }, safe(({ book_id }) => {
     const b = repo.getBook(book_id);
@@ -162,7 +175,7 @@ export function buildMcpServer() {
   server.registerTool('search', {
     title: 'Rechercher',
     description: 'Recherche plein texte dans les livres, les notes (idées, citations…), les mots du dictionnaire et les thèmes.',
-    inputSchema: { query: z.string() },
+    inputSchema: strict({ query: z.string() }),
     annotations: ro,
   }, safe(({ query }) => {
     const r = repo.search(query);
@@ -177,7 +190,7 @@ export function buildMcpServer() {
   server.registerTool('lookup_book', {
     title: 'Chercher un livre en ligne',
     description: 'Cherche un livre par titre, auteur ou ISBN dans Open Library et renvoie auteur, année, nombre de pages, ISBN et couverture, à passer ensuite à add_book. Les données peuvent être incomplètes ou concerner une autre édition.',
-    inputSchema: { query: z.string().describe('Titre (avec l’auteur si possible) ou ISBN') },
+    inputSchema: strict({ query: z.string().describe('Titre (avec l’auteur si possible) ou ISBN') }),
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, safe(async ({ query }) => {
     const res = await lookupBooks(query);
@@ -189,7 +202,7 @@ export function buildMcpServer() {
   server.registerTool('list_words', {
     title: 'Lire le dictionnaire',
     description: 'Liste les mots du dictionnaire personnel, avec définition, étymologie et phrases. Filtrable par texte ou par livre.',
-    inputSchema: { query: z.string().optional(), book_id: z.number().int().optional() },
+    inputSchema: strict({ query: z.string().optional(), book_id: z.number().int().optional() }),
     annotations: ro,
   }, safe(({ query, book_id }) => {
     const words = repo.listWords({ q: query, bookId: book_id });
@@ -199,6 +212,7 @@ export function buildMcpServer() {
   server.registerTool('list_themes', {
     title: 'Lister les thèmes',
     description: 'Liste les thèmes transversaux et le nombre d’idées et de livres rattachés à chacun.',
+    inputSchema: strict({}),
     annotations: ro,
   }, safe(() => {
     const t = repo.listThemes();
@@ -210,7 +224,7 @@ export function buildMcpServer() {
   server.registerTool('get_theme', {
     title: 'Lire un thème',
     description: 'Renvoie toutes les idées et citations rattachées à un thème, regroupées par livre. Utile pour comparer ce que disent plusieurs auteurs.',
-    inputSchema: { theme_id: z.number().int() },
+    inputSchema: strict({ theme_id: z.number().int() }),
     annotations: ro,
   }, safe(({ theme_id }) => {
     const t = repo.getTheme(theme_id);
@@ -227,6 +241,7 @@ export function buildMcpServer() {
   server.registerTool('find_incomplete', {
     title: 'Trouver les fiches à compléter',
     description: 'Liste les livres lus sans résumé, sans idées clés ou sans avis, les mots sans définition ou sans phrase, et les notes marquées « à vérifier ». Propose à l’utilisateur de les compléter avec lui.',
+    inputSchema: strict({}),
     annotations: ro,
   }, safe(() => {
     const items = repo.incomplete();
@@ -240,6 +255,7 @@ export function buildMcpServer() {
   server.registerTool('get_stats', {
     title: 'Statistiques de lecture',
     description: 'Livres et pages lus par année, objectif annuel, nombre d’idées, de citations et de mots.',
+    inputSchema: strict({}),
     annotations: ro,
   }, safe(() => {
     const s = repo.stats();
@@ -255,11 +271,11 @@ export function buildMcpServer() {
   server.registerTool('get_due_reviews', {
     title: 'Cartes à réviser',
     description: 'Renvoie les cartes dues en révision espacée (mots, idées clés, citations) avec question et réponse. Interroge l’utilisateur une carte à la fois sans lui montrer la réponse, puis enregistre le résultat avec record_review.',
-    inputSchema: {
+    inputSchema: strict({
       kind: z.enum(['mot', 'idee', 'citation']).optional(),
       book_id: z.number().int().optional(),
       limit: z.number().int().min(1).max(50).optional().describe('Défaut : 10'),
-    },
+    }),
     annotations: ro,
   }, safe(({ kind, book_id, limit }) => {
     const cards = repo.dueCards({ kind, bookId: book_id, limit: limit ?? 10 });
@@ -276,7 +292,7 @@ export function buildMcpServer() {
   server.registerTool('add_book', {
     title: 'Ajouter un livre',
     description: 'Ajoute un livre à la bibliothèque : une envie ou un livre à lire (status a_lire, défaut), une lecture en cours, ou un livre déjà lu. Utilise lookup_book avant pour récupérer couverture et métadonnées.',
-    inputSchema: { title: z.string(), ...bookFields },
+    inputSchema: strict({ title: z.string(), ...bookFields }),
   }, safe((a) => {
     const dup = repo.findBookByTitle(a.title);
     if (dup) return `Ce livre existe déjà : ${bookLine(dup)}. Utilise update_book pour le modifier.`;
@@ -286,13 +302,13 @@ export function buildMcpServer() {
   server.registerTool('update_book', {
     title: 'Modifier un livre',
     description: 'Modifie la fiche d’un livre : statut (commencé, terminé…), page en cours, résumé, avis, désaccords, note sur 5, etc. Seuls les champs fournis changent. Passer status à "lu" date la fin de lecture à aujourd’hui si elle est vide.',
-    inputSchema: { book_id: z.number().int(), title: z.string().optional(), ...bookFields },
+    inputSchema: strict({ book_id: z.number().int(), title: z.string().optional(), ...bookFields }),
   }, safe((a) => `Livre mis à jour : ${bookLine(repo.updateBook(a.book_id, bookInput(a)))}`));
 
   server.registerTool('delete_book', {
     title: 'Supprimer un livre',
     description: 'Supprime un livre et toutes ses notes (ses mots restent dans le dictionnaire). Seulement à la demande explicite de l’utilisateur.',
-    inputSchema: { book_id: z.number().int() },
+    inputSchema: strict({ book_id: z.number().int() }),
     annotations: { destructiveHint: true },
   }, safe(({ book_id }) => {
     const b = repo.getBookRow(book_id);
@@ -303,7 +319,7 @@ export function buildMcpServer() {
   server.registerTool('add_notes', {
     title: 'Ajouter des notes à un livre',
     description: 'Ajoute en un appel plusieurs idées clés, citations, notes ou personnages à un livre. C’est l’outil principal pour enregistrer ce que l’utilisateur a retenu.',
-    inputSchema: { book_id: z.number().int(), notes: z.array(z.object(noteFields)).min(1).max(60) },
+    inputSchema: strict({ book_id: z.number().int(), notes: z.array(strict(noteFields)).min(1).max(60) }),
   }, safe(({ book_id, notes }) => {
     const created = repo.createNotes(book_id, notes);
     return `${created.length} note(s) ajoutée(s) à « ${created[0].bookTitle} » :\n${created.map(noteLine).join('\n')}`;
@@ -312,24 +328,24 @@ export function buildMcpServer() {
   server.registerTool('update_note', {
     title: 'Modifier une note',
     description: 'Modifie une idée, citation, note ou personnage. Seuls les champs fournis changent.',
-    inputSchema: {
+    inputSchema: strict({
       note_id: z.number().int(),
       type: noteFields.type.optional(), text: z.string().optional(), comment: noteFields.comment,
       chapter: noteFields.chapter, page: noteFields.page, verify: noteFields.verify, themes: noteFields.themes,
-    },
+    }),
   }, safe(({ note_id, ...patch }) => `Note mise à jour :\n${noteLine(repo.updateNote(note_id, patch))}`));
 
   server.registerTool('delete_note', {
     title: 'Supprimer une note',
     description: 'Supprime une note. Seulement à la demande explicite de l’utilisateur.',
-    inputSchema: { note_id: z.number().int() },
+    inputSchema: strict({ note_id: z.number().int() }),
     annotations: { destructiveHint: true },
   }, safe(({ note_id }) => { repo.deleteNote(note_id); return 'Note supprimée.'; }));
 
   server.registerTool('add_words', {
     title: 'Ajouter des mots au dictionnaire',
     description: 'Ajoute un ou plusieurs mots au dictionnaire personnel. Les mots déjà présents sont signalés et non dupliqués.',
-    inputSchema: { words: z.array(z.object({ word: z.string(), ...wordFields })).min(1).max(60) },
+    inputSchema: strict({ words: z.array(strict({ word: z.string(), ...wordFields })).min(1).max(60) }),
   }, safe(({ words }) => {
     const out: string[] = [];
     for (const w of words) {
@@ -343,20 +359,20 @@ export function buildMcpServer() {
   server.registerTool('update_word', {
     title: 'Modifier un mot',
     description: 'Modifie ou complète un mot du dictionnaire. Seuls les champs fournis changent.',
-    inputSchema: { word_id: z.number().int(), word: z.string().optional(), ...wordFields },
+    inputSchema: strict({ word_id: z.number().int(), word: z.string().optional(), ...wordFields }),
   }, safe((a) => `Mot mis à jour :\n${wordLine(repo.updateWord(a.word_id, wordInput(a)))}`));
 
   server.registerTool('delete_word', {
     title: 'Supprimer un mot',
     description: 'Supprime un mot du dictionnaire. Seulement à la demande explicite de l’utilisateur.',
-    inputSchema: { word_id: z.number().int() },
+    inputSchema: strict({ word_id: z.number().int() }),
     annotations: { destructiveHint: true },
   }, safe(({ word_id }) => { repo.deleteWord(word_id); return 'Mot supprimé.'; }));
 
   server.registerTool('create_theme', {
     title: 'Créer un thème',
     description: 'Crée un thème transversal avec une description. (Un thème se crée aussi tout seul quand on le cite dans les themes d’une note.)',
-    inputSchema: { name: z.string(), description: z.string().optional() },
+    inputSchema: strict({ name: z.string(), description: z.string().optional() }),
   }, safe((a) => {
     const t = repo.createTheme(a);
     return `Thème créé : ${t.name} (theme_id=${t.id})`;
@@ -365,11 +381,11 @@ export function buildMcpServer() {
   server.registerTool('record_review', {
     title: 'Enregistrer une révision',
     description: 'Enregistre le résultat d’une carte révisée avec l’utilisateur : grade 0 = raté (revient tout de suite), 1 = hésitant (revient demain), 2 = su (intervalle allongé).',
-    inputSchema: {
+    inputSchema: strict({
       kind: z.enum(['mot', 'idee', 'citation']),
       id: z.number().int(),
       grade: z.number().int().min(0).max(2),
-    },
+    }),
   }, safe(({ kind, id, grade }) => {
     const r = repo.gradeCard(kind, id, grade);
     return `Enregistré. Prochaine révision le ${r.dueAt.slice(0, 10)} (boîte ${r.box}).`;
