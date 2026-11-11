@@ -7,11 +7,8 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 
 export const db = new DatabaseSync(path.join(DATA_DIR, 'bibliotheque.db'));
 
-db.exec(`
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS books (
+// kind « texte » = texte court (article, essai bref, chapitre, discours) : rangé à part des livres.
+const BOOKS_TABLE = `CREATE TABLE IF NOT EXISTS books (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
   subtitle TEXT NOT NULL DEFAULT '',
@@ -21,7 +18,9 @@ CREATE TABLE IF NOT EXISTS books (
   isbn TEXT NOT NULL DEFAULT '',
   cover_url TEXT NOT NULL DEFAULT '',
   color TEXT NOT NULL DEFAULT '',
-  kind TEXT NOT NULL DEFAULT 'essai' CHECK (kind IN ('essai','roman','autre')),
+  publication TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'essai' CHECK (kind IN ('essai','roman','texte','autre')),
   status TEXT NOT NULL DEFAULT 'a_lire' CHECK (status IN ('a_lire','en_cours','lu','abandonne')),
   current_page INTEGER NOT NULL DEFAULT 0,
   rating INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 5),
@@ -34,7 +33,13 @@ CREATE TABLE IF NOT EXISTS books (
   finished_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+)`;
+
+db.exec(`
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+${BOOKS_TABLE};
 
 -- Tout ce qu'on retient d'un livre : idées clés, citations, notes libres, personnages.
 CREATE TABLE IF NOT EXISTS notes (
@@ -109,3 +114,26 @@ export function tx<T>(fn: () => T): T {
     throw e;
   }
 }
+
+/**
+ * Migration des bases créées avant les textes courts : SQLite ne sait pas modifier une contrainte CHECK,
+ * on reconstruit donc la table books (procédure standard : nouvelle table, copie, échange des noms).
+ * Les identifiants sont conservés, les notes et les mots restent rattachés à leur livre.
+ */
+function migrateBooks() {
+  const sql = get<{ sql: string }>(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'books'`)?.sql ?? '';
+  if (sql.includes("'texte'")) return;
+  const cols = all<{ name: string }>(`PRAGMA table_info(books)`).map((c) => c.name).join(', ');
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    tx(() => {
+      db.exec(BOOKS_TABLE.replace('CREATE TABLE IF NOT EXISTS books', 'CREATE TABLE books_new'));
+      db.exec(`INSERT INTO books_new (${cols}) SELECT ${cols} FROM books`);
+      db.exec('DROP TABLE books');
+      db.exec('ALTER TABLE books_new RENAME TO books');
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+migrateBooks();

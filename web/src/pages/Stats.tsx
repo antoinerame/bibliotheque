@@ -10,7 +10,7 @@ export default function StatsPage() {
   const max = Math.max(1, ...s.byYear.map((y) => y.books));
   const pct = s.goal ? Math.min(100, Math.round((s.thisYear.books / s.goal) * 100)) : 0;
   const tiles: [string, number][] = [
-    ['Livres lus', t.read], ['Pages lues', t.pagesRead], ['En cours', t.reading], ['À lire', t.toRead],
+    ['Livres lus', t.read], ['Textes courts lus', t.textsRead], ['Pages lues', t.pagesRead], ['En cours', t.reading], ['À lire', t.toRead],
     ['Idées clés', t.ideas], ['Citations', t.quotes], ['Mots appris', t.words], ['Mots maîtrisés', t.wordsMastered],
   ];
   return (
@@ -47,7 +47,7 @@ export default function StatsPage() {
               <li key={y.year} className="year-bar">
                 <span className="year-label">{y.year}</span>
                 <span className="year-track"><span className="year-fill" style={{ width: `${(y.books / max) * 100}%` }} /></span>
-                <span className="year-value">{y.books} {y.books > 1 ? 'livres' : 'livre'} · {fmt(y.pages)} p.</span>
+                <span className="year-value">{y.books} {y.books > 1 ? 'livres' : 'livre'}{y.texts > 0 && ` · ${y.texts} ${y.texts > 1 ? 'textes' : 'texte'}`} · {fmt(y.pages)} p.</span>
               </li>
             ))}
           </ul>

@@ -19,7 +19,7 @@ function changed() {
 }
 
 /* ---------- types ---------- */
-export const BOOK_KINDS = ['essai', 'roman', 'autre'] as const;
+export const BOOK_KINDS = ['essai', 'roman', 'texte', 'autre'] as const;
 export const STATUSES = ['a_lire', 'en_cours', 'lu', 'abandonne'] as const;
 export const NOTE_TYPES = ['idee', 'citation', 'note', 'personnage'] as const;
 export type BookKind = (typeof BOOK_KINDS)[number];
@@ -36,6 +36,8 @@ export const NOTE_LABEL: Record<NoteType, string> = {
 export interface Book {
   id: number; title: string; subtitle: string; author: string;
   year: number | null; pages: number | null; isbn: string; coverUrl: string; color: string;
+  /** Textes courts : où le texte a paru (revue, journal, recueil) et lien pour le relire. */
+  publication: string; url: string;
   kind: BookKind; status: Status; currentPage: number; rating: number;
   recommendedBy: string; whyRead: string; summary: string; impact: string; disagreements: string;
   startedAt: string | null; finishedAt: string | null; createdAt: string;
@@ -87,6 +89,7 @@ function mapBook(r: any): Book {
   return {
     id: r.id, title: r.title, subtitle: r.subtitle, author: r.author,
     year: r.year, pages: r.pages, isbn: r.isbn, coverUrl: r.cover_url, color: r.color,
+    publication: r.publication ?? '', url: r.url ?? '',
     kind: r.kind, status: r.status, currentPage: r.current_page, rating: r.rating,
     recommendedBy: r.recommended_by, whyRead: r.why_read,
     summary: r.summary, impact: r.impact, disagreements: r.disagreements,
@@ -136,6 +139,8 @@ const BOOK_FIELDS: Record<string, { col: string; conv: (v: unknown) => string | 
   isbn: { col: 'isbn', conv: (v) => str(v, 20).replace(/[^0-9Xx]/g, '') },
   coverUrl: { col: 'cover_url', conv: (v) => { const s = str(v, 1000); return /^https?:\/\//.test(s) ? s : ''; } },
   color: { col: 'color', conv: (v) => { const s = str(v, 9); return /^#[0-9a-fA-F]{6}$/.test(s) ? s : ''; } },
+  publication: { col: 'publication', conv: (v) => str(v, 300) },
+  url: { col: 'url', conv: (v) => { const s = str(v, 1000); return /^https?:\/\//.test(s) ? s : ''; } },
   kind: { col: 'kind', conv: (v) => oneOf(v, BOOK_KINDS, 'Genre') },
   status: { col: 'status', conv: (v) => oneOf(v, STATUSES, 'Statut') },
   currentPage: { col: 'current_page', conv: (v) => intOrNull(v) ?? 0 },
@@ -546,12 +551,13 @@ export function incomplete(): Incomplete[] {
 /* ---------- accueil et statistiques ---------- */
 export function stats() {
   const books = listBooks();
+  // Les textes courts sont comptés à part : ils ne gonflent ni le nombre de livres ni l'objectif annuel.
   const read = books.filter((b) => b.status === 'lu');
-  const byYear = new Map<string, { year: string; books: number; pages: number }>();
+  const byYear = new Map<string, { year: string; books: number; texts: number; pages: number }>();
   for (const b of read) {
     const y = (b.finishedAt ?? '').slice(0, 4) || 'Sans date';
-    const e = byYear.get(y) ?? { year: y, books: 0, pages: 0 };
-    e.books++;
+    const e = byYear.get(y) ?? { year: y, books: 0, texts: 0, pages: 0 };
+    if (b.kind === 'texte') e.texts++; else e.books++;
     e.pages += b.pages ?? 0;
     byYear.set(y, e);
   }
@@ -560,11 +566,12 @@ export function stats() {
   return {
     year,
     goal: getSettings().yearlyGoal,
-    thisYear: byYear.get(year) ?? { year, books: 0, pages: 0 },
+    thisYear: byYear.get(year) ?? { year, books: 0, texts: 0, pages: 0 },
     byYear: [...byYear.values()].sort((a, b) => b.year.localeCompare(a.year)),
     totals: {
       books: books.length,
-      read: read.length,
+      read: read.filter((b) => b.kind !== 'texte').length,
+      textsRead: read.filter((b) => b.kind === 'texte').length,
       reading: books.filter((b) => b.status === 'en_cours').length,
       toRead: books.filter((b) => b.status === 'a_lire').length,
       pagesRead: read.reduce((s, b) => s + (b.pages ?? 0), 0),

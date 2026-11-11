@@ -22,13 +22,19 @@ export default function Library({ home, onAdd }: { home: Home | null; onAdd: () 
 
   const groups = useMemo(() => {
     const text = q.trim().toLowerCase();
-    const books = (home?.books ?? []).filter((b) =>
+    // « Tous » : les textes courts quittent les étagères de livres pour leur propre étagère, plus bas.
+    const matches = (home?.books ?? []).filter((b) =>
       (filter === 'tous' || b.kind === filter)
       && (!minRating || b.rating >= minRating)
-      && (!text || `${b.title} ${b.subtitle} ${b.author}`.toLowerCase().includes(text)));
+      && (!text || `${b.title} ${b.subtitle} ${b.author} ${b.publication}`.toLowerCase().includes(text)));
+    const books = filter === 'tous' ? matches.filter((b) => b.kind !== 'texte') : matches;
     const by = (s: Book['status']) => books.filter((b) => b.status === s);
     const sorted = (list: Book[]) => sort === 'date' ? list
       : [...list].sort((a, b) => (sort === 'auteur' ? lastName(a.author).localeCompare(lastName(b.author), 'fr') : 0) || a.title.localeCompare(b.title, 'fr'));
+    const textList = filter === 'tous' ? matches.filter((b) => b.kind === 'texte' && (!year || (b.finishedAt ?? '').startsWith(year))) : [];
+    const textGroups: ShelfGroup[] = ([['en_cours', 'En cours'], ['lu', 'Lus'], ['a_lire', 'À lire'], ['abandonne', 'Abandonnés']] as const)
+      .map(([s, label]) => ({ label, books: sorted(textList.filter((b) => b.status === s)) }))
+      .filter((g) => g.books.length);
     const read = sorted(by('lu').filter((b) => !year || (b.finishedAt ?? '').startsWith(year)));
     // Tous les livres lus sur une seule étagère ; triés par date, un séparateur ouvre chaque année.
     const readGroups: ShelfGroup[] = [];
@@ -43,6 +49,7 @@ export default function Library({ home, onAdd }: { home: Home | null; onAdd: () 
     const others = !year;
     return {
       read, readGroups,
+      texts: textGroups.flatMap((g) => g.books), textGroups,
       reading: others ? sorted(by('en_cours')) : [],
       toRead: others ? sorted(by('a_lire')) : [],
       dropped: others ? sorted(by('abandonne')) : [],
@@ -51,7 +58,7 @@ export default function Library({ home, onAdd }: { home: Home | null; onAdd: () 
 
   const filtered = filter !== 'tous' || !!year || minRating > 0 || !!q.trim();
   const reset = () => { setFilter('tous'); setYear(''); setMinRating(0); setQ(''); };
-  const nothing = !groups.read.length && !groups.reading.length && !groups.toRead.length && !groups.dropped.length;
+  const nothing = !groups.read.length && !groups.reading.length && !groups.toRead.length && !groups.dropped.length && !groups.texts.length;
 
   if (!home) return <Loading />;
   const { stats, daily } = home;
@@ -100,9 +107,9 @@ export default function Library({ home, onAdd }: { home: Home | null; onAdd: () 
 
       <div className="library-toolbar">
         <div className="chips" role="group" aria-label="Filtrer par genre">
-          {(['tous', 'essai', 'roman', 'autre'] as Filter[]).map((f) => (
+          {(['tous', 'essai', 'roman', 'texte', 'autre'] as Filter[]).map((f) => (
             <button key={f} type="button" className={`chip${filter === f ? ' chip-on' : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {f === 'tous' ? 'Tous' : f === 'essai' ? 'Essais' : f === 'roman' ? 'Romans' : 'Autres'}
+              {f === 'tous' ? 'Tous' : f === 'essai' ? 'Essais' : f === 'roman' ? 'Romans' : f === 'texte' ? 'Textes courts' : 'Autres'}
             </button>
           ))}
         </div>
@@ -158,6 +165,12 @@ export default function Library({ home, onAdd }: { home: Home | null; onAdd: () 
         )}
         {groups.dropped.length > 0 && (
           <Shelf title="Abandonnés" hint={count(groups.dropped.length, 'livre', 'livres')} variant="abandonne" books={groups.dropped} />
+        )}
+        {groups.texts.length > 0 && (
+          <Shelf
+            title="Textes courts" hint={count(groups.texts.length, 'texte', 'textes')} variant="lu"
+            books={groups.texts} groups={groups.textGroups}
+          />
         )}
       </div>
     </div>

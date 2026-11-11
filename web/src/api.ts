@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type BookKind = 'essai' | 'roman' | 'autre';
+export type BookKind = 'essai' | 'roman' | 'texte' | 'autre';
 export type Status = 'a_lire' | 'en_cours' | 'lu' | 'abandonne';
 export type NoteType = 'idee' | 'citation' | 'note' | 'personnage';
 export type CardKind = 'mot' | 'idee' | 'citation';
@@ -10,6 +10,8 @@ export interface Book {
   year: number | null; pages: number | null; isbn: string; coverUrl: string;
   /** Couleur de dos choisie par l'utilisateur (#rrggbb) ou '' : au design de choisir. */
   color: string;
+  /** Textes courts : où le texte a paru (revue, journal, recueil) et lien pour le relire. */
+  publication: string; url: string;
   kind: BookKind; status: Status; currentPage: number; rating: number;
   recommendedBy: string; whyRead: string; summary: string; impact: string; disagreements: string;
   startedAt: string | null; finishedAt: string | null; createdAt: string;
@@ -35,11 +37,11 @@ export interface Card {
   bookId: number | null; bookTitle: string; box: number; isNew: boolean;
 }
 export interface Incomplete { kind: 'livre' | 'mot' | 'note'; id: number; bookId: number | null; label: string; missing: string[] }
-export interface YearStat { year: string; books: number; pages: number }
+export interface YearStat { year: string; books: number; texts: number; pages: number }
 export interface Stats {
   year: string; goal: number; thisYear: YearStat; byYear: YearStat[];
   totals: {
-    books: number; read: number; reading: number; toRead: number; pagesRead: number;
+    books: number; read: number; textsRead: number; reading: number; toRead: number; pagesRead: number;
     ideas: number; quotes: number; notes: number; words: number; wordsMastered: number; themes: number;
   };
 }
@@ -50,7 +52,7 @@ export interface LookupResult {
 export interface SearchResult { books: Book[]; notes: Note[]; words: Word[]; themes: Theme[] }
 
 export const STATUS_LABEL: Record<Status, string> = { a_lire: 'À lire', en_cours: 'En cours', lu: 'Lu', abandonne: 'Abandonné' };
-export const KIND_LABEL: Record<BookKind, string> = { essai: 'Essai', roman: 'Roman', autre: 'Autre' };
+export const KIND_LABEL: Record<BookKind, string> = { essai: 'Essai', roman: 'Roman', texte: 'Texte court', autre: 'Autre' };
 export const NOTE_LABEL: Record<NoteType, string> = { idee: 'Idée clé', citation: 'Citation', note: 'Note', personnage: 'Personnage' };
 
 export class ApiError extends Error {

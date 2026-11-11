@@ -6,7 +6,8 @@ import { lookupBooks } from './lookup.ts';
 const INSTRUCTIONS = `La Bibliothèque est le site personnel de lecture de l'utilisateur : ses livres (lus, en cours, à lire), ce qu'il en a retenu, et le dictionnaire des mots qu'il a appris. Tu peux tout y lire et tout y écrire : ajouter des livres, des envies de lecture, des résumés, des idées, des citations, des mots.
 
 Structure :
-- Livre : status "a_lire" (pile à lire / envie), "en_cours", "lu", "abandonne". kind "essai", "roman" ou "autre".
+- Livre : status "a_lire" (pile à lire / envie), "en_cours", "lu", "abandonne". kind "essai", "roman", "texte" ou "autre".
+  - kind "texte" = texte court (article, essai bref, chapitre isolé, discours, papier de recherche) : il a sa propre étagère et ne compte pas dans l'objectif de livres. publication = où il a paru (revue, journal, recueil), url = lien pour le relire. N'utilise "autre" que pour ce qui n'est ni un livre ni un texte court.
   - summary = le résumé en trois phrases environ. impact = ce que le livre a changé pour l'utilisateur. disagreements = ses désaccords avec l'auteur.
   - recommended_by / why_read = qui a recommandé le livre et pourquoi le lire (surtout pour les livres à lire).
 - Notes d'un livre, quatre types :
@@ -55,7 +56,9 @@ const bookFields = {
   pages: z.number().int().optional().describe('Nombre de pages'),
   isbn: z.string().optional(),
   cover_url: z.string().optional().describe('Adresse http(s) de l’image de couverture (fournie par lookup_book)'),
-  kind: z.enum(repo.BOOK_KINDS).optional().describe('essai (défaut), roman ou autre'),
+  kind: z.enum(repo.BOOK_KINDS).optional().describe('essai (défaut), roman, texte (texte court : article, essai bref, chapitre, discours) ou autre'),
+  publication: z.string().optional().describe('Textes courts : où le texte a paru, ex. « American Economic Review, vol. 35, n° 4 »'),
+  url: z.string().optional().describe('Lien http(s) vers le texte (utile pour les articles)'),
   status: z.enum(repo.STATUSES).optional().describe('a_lire (défaut), en_cours, lu, abandonne'),
   current_page: z.number().int().optional().describe('Page où en est l’utilisateur'),
   rating: z.number().int().min(0).max(5).optional().describe('Note de l’utilisateur sur 5 (0 = pas noté). Ne la devine pas.'),
@@ -108,7 +111,8 @@ function wordInput(a: any) {
 }
 
 const bookLine = (b: repo.Book) => {
-  const bits = [repo.STATUS_LABEL[b.status], b.kind];
+  const bits = [repo.STATUS_LABEL[b.status], b.kind === 'texte' ? 'texte court' : b.kind];
+  if (b.publication) bits.push(b.publication);
   if (b.status === 'en_cours' && b.pages) bits.push(`p. ${b.currentPage}/${b.pages}`);
   if (b.rating) bits.push(`${b.rating}/5`);
   const n = b.counts;
@@ -254,17 +258,17 @@ export function buildMcpServer() {
 
   server.registerTool('get_stats', {
     title: 'Statistiques de lecture',
-    description: 'Livres et pages lus par année, objectif annuel, nombre d’idées, de citations et de mots.',
+    description: 'Livres, textes courts et pages lus par année, objectif annuel (livres seulement), nombre d’idées, de citations et de mots.',
     inputSchema: strict({}),
     annotations: ro,
   }, safe(() => {
     const s = repo.stats();
     const t = s.totals;
     return [
-      `${s.year} : ${s.thisYear.books} livre(s) lu(s)${s.goal ? ` sur un objectif de ${s.goal}` : ''}, ${s.thisYear.pages} pages.`,
-      `En tout : ${t.read} lus, ${t.reading} en cours, ${t.toRead} à lire ; ${t.pagesRead} pages lues.`,
+      `${s.year} : ${s.thisYear.books} livre(s) lu(s)${s.goal ? ` sur un objectif de ${s.goal}` : ''}, ${s.thisYear.texts} texte(s) court(s), ${s.thisYear.pages} pages.`,
+      `En tout : ${t.read} livre(s) lu(s), ${t.textsRead} texte(s) court(s) lu(s), ${t.reading} en cours, ${t.toRead} à lire ; ${t.pagesRead} pages lues.`,
       `${t.ideas} idées clés, ${t.quotes} citations, ${t.notes} notes, ${t.words} mots (${t.wordsMastered} maîtrisés), ${t.themes} thèmes.`,
-      ...s.byYear.map((y) => `  ${y.year} : ${y.books} livre(s), ${y.pages} pages`),
+      ...s.byYear.map((y) => `  ${y.year} : ${y.books} livre(s), ${y.texts} texte(s), ${y.pages} pages`),
     ].join('\n');
   }));
 

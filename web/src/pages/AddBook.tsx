@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, KIND_LABEL, STATUS_LABEL, type Book, type BookKind, type LookupResult, type Status } from '../api';
 import { ErrorLine, Field, Modal } from '../ui';
 
-const blank = { title: '', subtitle: '', author: '', year: '', pages: '', isbn: '', coverUrl: '', kind: 'essai' as BookKind, status: 'a_lire' as Status, recommendedBy: '', whyRead: '' };
+const blank = { title: '', subtitle: '', author: '', year: '', pages: '', isbn: '', coverUrl: '', publication: '', url: '', kind: 'essai' as BookKind, status: 'a_lire' as Status, recommendedBy: '', whyRead: '' };
 
 export default function AddBook({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
@@ -77,6 +77,12 @@ export default function AddBook({ onClose }: { onClose: () => void }) {
                 {Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </Field>
+            {form.kind === 'texte' && (
+              <>
+                <Field label="Paru dans" hint="Revue, journal ou recueil"><input className="input" value={form.publication} onChange={(e) => set({ publication: e.target.value })} /></Field>
+                <Field label="Lien"><input className="input" type="url" value={form.url} onChange={(e) => set({ url: e.target.value })} /></Field>
+              </>
+            )}
             <Field label="Où le ranger">
               <select className="select" value={form.status} onChange={(e) => set({ status: e.target.value as Status })}>
                 {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}

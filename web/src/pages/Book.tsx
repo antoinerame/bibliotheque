@@ -37,7 +37,7 @@ export default function BookPage() {
   const patch = (body: Partial<Record<keyof BookFull, unknown>>) => api(`/books/${id}`, { method: 'PATCH', body });
   const pct = book.pages ? Math.min(100, Math.round((book.currentPage / book.pages) * 100)) : 0;
   const sections = SECTIONS.filter((s) => s.type !== 'personnage' || book.kind === 'roman' || book.counts.personnage > 0);
-  const meta = [KIND_LABEL[book.kind], book.year, book.pages && `${book.pages} pages`].filter(Boolean).join(' · ');
+  const meta = [KIND_LABEL[book.kind], book.publication, book.year, book.pages && `${book.pages} pages`].filter(Boolean).join(' · ');
 
   return (
     <article className={`book book-${book.status} book-kind-${book.kind}`}>
@@ -50,6 +50,7 @@ export default function BookPage() {
           {book.subtitle && <p className="book-subtitle">{book.subtitle}</p>}
           {book.author && <p className="book-author">{book.author}</p>}
           <p className="book-meta">{meta}</p>
+          {book.url && <p className="book-meta"><a href={book.url} target="_blank" rel="noreferrer">Lire le texte ↗</a></p>}
 
           <div className="book-state">
             <label className="book-status">
@@ -178,6 +179,7 @@ function DetailsModal({ book, onClose }: { book: BookFull; onClose: () => void }
     title: book.title, subtitle: book.subtitle, author: book.author,
     year: book.year ? String(book.year) : '', pages: book.pages ? String(book.pages) : '',
     kind: book.kind, coverUrl: book.coverUrl, color: book.color,
+    publication: book.publication, url: book.url,
     startedAt: book.startedAt ?? '', finishedAt: book.finishedAt ?? '',
     recommendedBy: book.recommendedBy, whyRead: book.whyRead,
   });
@@ -208,6 +210,12 @@ function DetailsModal({ book, onClose }: { book: BookFull; onClose: () => void }
               {Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
           </Field>
+          {(f.kind === 'texte' || f.publication || f.url) && (
+            <>
+              <Field label="Paru dans" hint="Revue, journal ou recueil"><input className="input" value={f.publication} onChange={(e) => set({ publication: e.target.value })} /></Field>
+              <Field label="Lien"><input className="input" type="url" value={f.url} onChange={(e) => set({ url: e.target.value })} /></Field>
+            </>
+          )}
           <div className="form-row">
             <Field label="Commencé le"><input className="input" type="date" value={f.startedAt} onChange={(e) => set({ startedAt: e.target.value })} /></Field>
             <Field label="Terminé le"><input className="input" type="date" value={f.finishedAt} onChange={(e) => set({ finishedAt: e.target.value })} /></Field>
